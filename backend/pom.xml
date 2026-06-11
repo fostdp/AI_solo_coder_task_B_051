@@ -24,6 +24,10 @@
         <module>salinity-transport</module>
         <module>crystal-pressure</module>
         <module>alert-push</module>
+        <module>blockchain-logger</module>
+        <module>rainflow-cycle</module>
+        <module>flaking-rf</module>
+        <module>dqn-controller</module>
     </modules>
 
     <properties>
@@ -35,6 +39,7 @@
         <jjwt.version>0.11.5</jjwt.version>
         <hutool.version>5.8.27</hutool.version>
         <disruptor.version>4.0.0</disruptor.version>
+        <onnxruntime.version>1.17.0</onnxruntime.version>
     </properties>
 
     <dependencyManagement>
@@ -96,6 +101,12 @@
                 <groupId>com.lmax</groupId>
                 <artifactId>disruptor</artifactId>
                 <version>${disruptor.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.microsoft.onnxruntime</groupId>
+                <artifactId>onnxruntime</artifactId>
+                <version>${onnxruntime.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
