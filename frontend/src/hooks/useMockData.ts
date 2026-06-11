@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Tomb, Chamber, Device, SaltData, EnvData, AnalysisResult, Alarm, RiskLevel, AlarmLevel, AlarmStatus } from '@/types';
+import { Tomb, Chamber, Device, SaltData, EnvData, AnalysisResult, Alarm, RiskLevel, AlarmLevel, AlarmStatus, CycleCountData } from '@/types';
 
 export function useMockData() {
   const [tombs, setTombs] = useState<Tomb[]>([]);
@@ -9,6 +9,7 @@ export function useMockData() {
   const [envData, setEnvData] = useState<EnvData[]>([]);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
   const [alarms, setAlarms] = useState<Alarm[]>([]);
+  const [cycleCountDataList, setCycleCountDataList] = useState<CycleCountData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const generateMockData = useCallback(() => {
@@ -223,6 +224,59 @@ export function useMockData() {
       },
     ];
 
+    const mockCycleCountDataList: CycleCountData[] = mockChambers.map((chamber, chamberIdx) => {
+      const now = Date.now();
+      const isHighRisk = chamberIdx === 2 || chamberIdx === 5;
+      
+      const totalCycles = isHighRisk ? 128 : 56;
+      const fullCycles = Math.floor(totalCycles * 0.6);
+      const partialCycles = totalCycles - fullCycles;
+      const crossingCycles = isHighRisk ? 45 : 18;
+      const maxRange = isHighRisk ? 45 : 35;
+      const minRange = 5;
+      const averageRange = isHighRisk ? 22 : 15;
+      
+      const totalDamage = isHighRisk ? 0.1567 : 0.0423;
+      const damageLevel = isHighRisk ? 'HIGH' : 'MEDIUM';
+      
+      const amplitudeHistogram = [
+        { range: [0, 10] as [number, number], count: Math.floor(totalCycles * 0.3) },
+        { range: [10, 20] as [number, number], count: Math.floor(totalCycles * 0.25) },
+        { range: [20, 30] as [number, number], count: Math.floor(totalCycles * 0.2) },
+        { range: [30, 40] as [number, number], count: Math.floor(totalCycles * 0.15) },
+        { range: [40, 50] as [number, number], count: Math.floor(totalCycles * 0.1) },
+      ];
+      
+      const rhTimeSeries = [];
+      for (let i = 23; i >= 0; i--) {
+        const time = new Date(now - i * 3600000).toISOString();
+        const baseRh = isHighRisk ? 70 : 55;
+        const variation = Math.sin((23 - i) / 4) * 15;
+        const rh = Math.max(30, Math.min(95, baseRh + variation + (Math.random() - 0.5) * 5));
+        rhTimeSeries.push({ time, rh: parseFloat(rh.toFixed(1)) });
+      }
+      
+      return {
+        id: `CC-${chamber.id}`,
+        tombId: chamber.tombId,
+        chamberId: chamber.id,
+        totalCycles,
+        fullCycles,
+        partialCycles,
+        crossingCycles,
+        averageRange,
+        maxRange,
+        minRange,
+        totalDamage,
+        damageLevel: damageLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        amplitudeHistogram,
+        rhTimeSeries,
+        periodStart: new Date(now - 7 * 24 * 3600000).toISOString(),
+        periodEnd: new Date(now).toISOString(),
+        createdAt: new Date(now).toISOString(),
+      };
+    });
+
     setTombs(mockTombs);
     setChambers(mockChambers);
     setDevices(mockDevices);
@@ -230,6 +284,7 @@ export function useMockData() {
     setEnvData(mockEnvData);
     setAnalysisResults(mockAnalysis);
     setAlarms(mockAlarms);
+    setCycleCountDataList(mockCycleCountDataList);
     setLoading(false);
   }, []);
 
@@ -302,6 +357,7 @@ export function useMockData() {
     envData,
     analysisResults,
     alarms,
+    cycleCountDataList,
     loading,
     refresh: generateMockData,
   };
