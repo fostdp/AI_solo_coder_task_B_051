@@ -739,4 +739,151 @@ class DelaminationRiskModelTest {
                     "训练后准确率应不低于60%，实际: " + accuracy);
         }
     }
+
+    // ============================================================
+    // 十、SMOTE合成样本生成测试（修复验证）
+    // ============================================================
+    @Nested
+    @DisplayName("十、SMOTE合成样本生成测试")
+    class SmoteTests {
+
+        private List<DelaminationRiskModel.FeatureInput> createImbalancedDataset() {
+            List<DelaminationRiskModel.FeatureInput> inputs = new ArrayList<>();
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.1, 1.8, 1, 5, 3));
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.2, 1.5, 2, 8, 4));
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.3, 1.6, 3, 6, 2));
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.15, 1.7, 1, 4, 3));
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.25, 1.4, 2, 7, 5));
+            inputs.add(new DelaminationRiskModel.FeatureInput(4.5, 0.3, 20, 30, 15));
+            inputs.add(new DelaminationRiskModel.FeatureInput(3.8, 0.5, 18, 28, 12));
+            return inputs;
+        }
+
+        private List<Boolean> createImbalancedLabels() {
+            return List.of(false, false, false, false, false, true, true);
+        }
+
+        @Test
+        @DisplayName("30. SMOTE生成合成样本后总数增加")
+        void testSmote_GeneratesSyntheticSamples() {
+            List<DelaminationRiskModel.FeatureInput> inputs = createImbalancedDataset();
+            List<Boolean> labels = createImbalancedLabels();
+
+            DelaminationRiskModel.SmoteResult result = model.generateSmoteSamples(inputs, labels, 3, 1.0);
+
+            log.info("SMOTE前: {}样本, SMOTE后: {}样本", inputs.size(), result.getAugmentedInputs().size());
+            assertTrue(result.getAugmentedInputs().size() > inputs.size(),
+                    "SMOTE后样本数应增加，实际: " + result.getAugmentedInputs().size());
+            assertEquals(result.getAugmentedInputs().size(), result.getAugmentedLabels().size(),
+                    "特征和标签数量应一致");
+        }
+
+        @Test
+        @DisplayName("31. SMOTE后少数类样本数接近多数类")
+        void testSmote_BalancesClassDistribution() {
+            List<DelaminationRiskModel.FeatureInput> inputs = createImbalancedDataset();
+            List<Boolean> labels = createImbalancedLabels();
+
+            DelaminationRiskModel.SmoteResult result = model.generateSmoteSamples(inputs, labels, 3, 1.0);
+
+            int minorityCount = 0;
+            int majorityCount = 0;
+            for (Boolean label : result.getAugmentedLabels()) {
+                if (label) minorityCount++;
+                else majorityCount++;
+            }
+
+            log.info("SMOTE后类别分布 - 少数类(起甲): {}, 多数类(安全): {}", minorityCount, majorityCount);
+            assertTrue(minorityCount >= majorityCount - 1,
+                    String.format("SMOTE后少数类(%d)应接近多数类(%d)", minorityCount, majorityCount));
+        }
+
+        @Test
+        @DisplayName("32. SMOTE合成样本特征值在合理范围内")
+        void testSmote_SyntheticFeaturesInRange() {
+            List<DelaminationRiskModel.FeatureInput> inputs = createImbalancedDataset();
+            List<Boolean> labels = createImbalancedLabels();
+
+            DelaminationRiskModel.SmoteResult result = model.generateSmoteSamples(inputs, labels, 3, 1.0);
+
+            for (int i = inputs.size(); i < result.getAugmentedInputs().size(); i++) {
+                DelaminationRiskModel.FeatureInput synthetic = result.getAugmentedInputs().get(i);
+                assertTrue(synthetic.getCrystallizationPressure() >= 0,
+                        "合成样本压力应≥0");
+                assertTrue(synthetic.getAdhesionStrength() >= 0,
+                        "合成样本附着力应≥0");
+                assertTrue(synthetic.getCycleCount7d() >= 0,
+                        "合成样本循环次数应≥0");
+                assertTrue(synthetic.getAvgDailyRhFluctuation() >= 0,
+                        "合成样本RH波动应≥0");
+                assertTrue(synthetic.getTemperatureVariation() >= 0,
+                        "合成样本温度变幅应≥0");
+            }
+        }
+
+        @Test
+        @DisplayName("33. SMOTE后训练准确率提升")
+        void testSmote_TrainingAccuracyImproves() {
+            List<DelaminationRiskModel.FeatureInput> inputs = createImbalancedDataset();
+            List<Boolean> labels = createImbalancedLabels();
+
+            DelaminationRiskModel modelNoSmote = new DelaminationRiskModel(0, 0, 0, 0, 0, 0, 0);
+            modelNoSmote.train(inputs, labels, 0.5, 200);
+
+            int correctNoSmote = 0;
+            for (int i = 0; i < inputs.size(); i++) {
+                double prob = modelNoSmote.predict(inputs.get(i)).getProbability();
+                if ((prob >= 0.5) == labels.get(i)) correctNoSmote++;
+            }
+            double accNoSmote = (double) correctNoSmote / inputs.size();
+
+            DelaminationRiskModel modelWithSmote = new DelaminationRiskModel(0, 0, 0, 0, 0, 0, 0);
+            modelWithSmote.trainWithSmote(inputs, labels, 0.5, 200, 3, 1.0);
+
+            int correctWithSmote = 0;
+            for (int i = 0; i < inputs.size(); i++) {
+                double prob = modelWithSmote.predict(inputs.get(i)).getProbability();
+                if ((prob >= 0.5) == labels.get(i)) correctWithSmote++;
+            }
+            double accWithSmote = (double) correctWithSmote / inputs.size();
+
+            log.info("无SMOTE训练准确率: {:.1f}%, SMOTE训练准确率: {:.1f}%",
+                    accNoSmote * 100, accWithSmote * 100);
+            assertTrue(accWithSmote >= accNoSmote * 0.8,
+                    String.format("SMOTE后准确率(%.1f%%)不应显著低于无SMOTE(%.1f%%)",
+                            accWithSmote * 100, accNoSmote * 100));
+        }
+
+        @Test
+        @DisplayName("34. SMOTE对空少数类返回原始数据")
+        void testSmote_EmptyMinority_ReturnsOriginal() {
+            List<DelaminationRiskModel.FeatureInput> inputs = new ArrayList<>();
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.1, 1.8, 1, 5, 3));
+            inputs.add(new DelaminationRiskModel.FeatureInput(0.2, 1.5, 2, 8, 4));
+            List<Boolean> labels = List.of(false, false);
+
+            DelaminationRiskModel.SmoteResult result = model.generateSmoteSamples(inputs, labels, 3, 1.0);
+
+            assertEquals(inputs.size(), result.getAugmentedInputs().size(),
+                    "少数类为空时应返回原始数据");
+        }
+
+        @Test
+        @DisplayName("35. SMOTE参数校验：null输入抛异常")
+        void testSmote_NullInput_ThrowsException() {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> model.generateSmoteSamples(null, List.of(true), 5, 1.0));
+            assertEquals("训练数据不能为空", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("36. SMOTE参数校验：k<1抛异常")
+        void testSmote_InvalidK_ThrowsException() {
+            List<DelaminationRiskModel.FeatureInput> inputs = createImbalancedDataset();
+            List<Boolean> labels = createImbalancedLabels();
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> model.generateSmoteSamples(inputs, labels, 0, 1.0));
+        }
+    }
 }
