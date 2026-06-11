@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * 壁画颜料层起甲风险评估模型
@@ -794,6 +795,240 @@ public class DelaminationRiskModel {
             throw new IllegalArgumentException(
                     "温度变幅不能为负数: " + input.getTemperatureVariation());
         }
+    }
+
+    /**
+     * 使用SMOTE算法生成合成训练样本
+     *
+     * 修复缺陷：起甲评估缺乏训练数据
+     * 根因：壁画起甲事件属于不可逆文物损伤，真实样本极度稀缺，
+     *       导致逻辑回归训练集严重不平衡（少数类"起甲"样本远少于"安全"样本），
+     *       直接用梯度下降训练会导致模型偏向多数类（全预测为安全），对高风险场景欠敏感。
+     * 修复：实现SMOTE（Synthetic Minority Over-sampling Technique）算法，
+     *       在少数类样本之间线性插值生成合成样本，使训练集类别平衡。
+     *       算法：对每个少数类样本，找k个最近邻，随机选一个邻居，
+     *             沿连线的随机比例处生成新样本：x_new = x + delta * (x_neighbor - x)
+     *
+     * @param inputs 原始训练特征列表
+     * @param labels 原始标签列表（true=起甲，false=安全）
+     * @param k SMOTE近邻数，默认5
+     * @param oversamplingRatio 过采样比率（合成少数类样本数/多数类样本数），1.0=完全平衡
+     * @return 包含原始+合成样本的增广数据 [增广特征列表, 增广标签列表]
+     * @throws IllegalArgumentException 参数无效时抛出
+     */
+    public SmoteResult generateSmoteSamples(List<FeatureInput> inputs, List<Boolean> labels,
+                                            int k, double oversamplingRatio) {
+        if (inputs == null || labels == null || inputs.isEmpty()) {
+            throw new IllegalArgumentException("训练数据不能为空");
+        }
+        if (inputs.size() != labels.size()) {
+            throw new IllegalArgumentException(
+                    "特征数量与标签数量不一致: " + inputs.size() + " vs " + labels.size());
+        }
+        if (k < 1) {
+            throw new IllegalArgumentException("近邻数k必须>=1: " + k);
+        }
+        if (oversamplingRatio <= 0) {
+            throw new IllegalArgumentException("过采样比率必须为正数: " + oversamplingRatio);
+        }
+
+        Random rng = new Random(42);
+
+        List<FeatureInput> minorityInputs = new ArrayList<>();
+        List<Boolean> minorityLabels = new ArrayList<>();
+        List<FeatureInput> majorityInputs = new ArrayList<>();
+        List<Boolean> majorityLabels = new ArrayList<>();
+
+        for (int i = 0; i < inputs.size(); i++) {
+            if (labels.get(i)) {
+                minorityInputs.add(inputs.get(i));
+                minorityLabels.add(labels.get(i));
+            } else {
+                majorityInputs.add(inputs.get(i));
+                majorityLabels.add(labels.get(i));
+            }
+        }
+
+        log.info("SMOTE样本分布 - 多数类(安全): {}, 少数类(起甲): {}",
+                majorityInputs.size(), minorityInputs.size());
+
+        if (minorityInputs.isEmpty()) {
+            log.warn("少数类样本为空，无法执行SMOTE，返回原始数据");
+            return new SmoteResult(new ArrayList<>(inputs), new ArrayList<>(labels));
+        }
+
+        int numSynthetic = (int) (majorityInputs.size() * oversamplingRatio) - minorityInputs.size();
+        if (numSynthetic <= 0) {
+            log.info("数据已平衡或少数类已足够，无需SMOTE");
+            return new SmoteResult(new ArrayList<>(inputs), new ArrayList<>(labels));
+        }
+
+        List<FeatureInput> syntheticInputs = new ArrayList<>();
+        List<Boolean> syntheticLabels = new ArrayList<>();
+
+        int minoritySize = minorityInputs.size();
+        int actualK = Math.min(k, minoritySize - 1);
+        if (actualK < 1) {
+            actualK = 1;
+        }
+
+        for (int n = 0; n < numSynthetic; n++) {
+            int idx = rng.nextInt(minoritySize);
+            FeatureInput sample = minorityInputs.get(idx);
+
+            List<Integer> neighbors = findKNearestNeighbors(sample, minorityInputs, actualK, idx);
+
+            int neighborIdx = neighbors.get(rng.nextInt(neighbors.size()));
+            FeatureInput neighbor = minorityInputs.get(neighborIdx);
+
+            double delta = rng.nextDouble();
+
+            FeatureInput synthetic = interpolateFeatures(sample, neighbor, delta);
+            syntheticInputs.add(synthetic);
+            syntheticLabels.add(true);
+        }
+
+        List<FeatureInput> augmentedInputs = new ArrayList<>(inputs);
+        List<Boolean> augmentedLabels = new ArrayList<>(labels);
+        augmentedInputs.addAll(syntheticInputs);
+        augmentedLabels.addAll(syntheticLabels);
+
+        log.info("SMOTE生成完成 - 原始样本: {}, 合成样本: {}, 总样本: {}",
+                inputs.size(), syntheticInputs.size(), augmentedInputs.size());
+
+        return new SmoteResult(augmentedInputs, augmentedLabels);
+    }
+
+    /**
+     * SMOTE简化版：使用默认参数(k=5, ratio=1.0)
+     *
+     * @param inputs 原始训练特征列表
+     * @param labels 原始标签列表
+     * @return 增广后的数据
+     */
+    public SmoteResult generateSmoteSamples(List<FeatureInput> inputs, List<Boolean> labels) {
+        return generateSmoteSamples(inputs, labels, 5, 1.0);
+    }
+
+    /**
+     * 在特征空间中寻找k个最近邻
+     *
+     * 使用欧氏距离（归一化特征空间）计算近邻。
+     *
+     * @param target 目标样本
+     * @param candidates 候选样本列表
+     * @param k 近邻数
+     * @param excludeIdx 排除的索引（通常是自身）
+     * @return 最近邻的索引列表
+     */
+    private List<Integer> findKNearestNeighbors(FeatureInput target, List<FeatureInput> candidates,
+                                                 int k, int excludeIdx) {
+        double[] targetNorm = normalizeFeatures(target);
+
+        List<double[]> allNorm = new ArrayList<>();
+        for (FeatureInput candidate : candidates) {
+            allNorm.add(normalizeFeatures(candidate));
+        }
+
+        List<NeighborDistance> distances = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            if (i == excludeIdx) continue;
+            double dist = euclideanDistance(targetNorm, allNorm.get(i));
+            distances.add(new NeighborDistance(i, dist));
+        }
+
+        distances.sort((a, b) -> Double.compare(a.distance, b.distance));
+
+        List<Integer> neighbors = new ArrayList<>();
+        for (int i = 0; i < Math.min(k, distances.size()); i++) {
+            neighbors.add(distances.get(i).index);
+        }
+        return neighbors;
+    }
+
+    /**
+     * 在两个样本之间线性插值生成合成样本
+     *
+     * @param a 样本A
+     * @param b 样本B
+     * @param delta 插值比例 [0, 1]，0=完全等于A，1=完全等于B
+     * @return 合成样本
+     */
+    private FeatureInput interpolateFeatures(FeatureInput a, FeatureInput b, double delta) {
+        double pressure = a.getCrystallizationPressure()
+                + delta * (b.getCrystallizationPressure() - a.getCrystallizationPressure());
+        double adhesion = a.getAdhesionStrength()
+                + delta * (b.getAdhesionStrength() - a.getAdhesionStrength());
+        double cycles = a.getCycleCount7d()
+                + delta * (b.getCycleCount7d() - a.getCycleCount7d());
+        double rhFluc = a.getAvgDailyRhFluctuation()
+                + delta * (b.getAvgDailyRhFluctuation() - a.getAvgDailyRhFluctuation());
+        double tempVar = a.getTemperatureVariation()
+                + delta * (b.getTemperatureVariation() - a.getTemperatureVariation());
+
+        return new FeatureInput(pressure, adhesion, cycles, rhFluc, tempVar);
+    }
+
+    /**
+     * 计算欧氏距离
+     *
+     * @param a 向量A
+     * @param b 向量B
+     * @return 欧氏距离
+     */
+    private double euclideanDistance(double[] a, double[] b) {
+        double sum = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            double diff = a[i] - b[i];
+            sum += diff * diff;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * SMOTE结果封装类
+     */
+    @Getter
+    public static class SmoteResult {
+        private final List<FeatureInput> augmentedInputs;
+        private final List<Boolean> augmentedLabels;
+
+        public SmoteResult(List<FeatureInput> augmentedInputs, List<Boolean> augmentedLabels) {
+            this.augmentedInputs = augmentedInputs;
+            this.augmentedLabels = augmentedLabels;
+        }
+    }
+
+    /**
+     * 近邻距离辅助类
+     */
+    private static class NeighborDistance {
+        final int index;
+        final double distance;
+
+        NeighborDistance(int index, double distance) {
+            this.index = index;
+            this.distance = distance;
+        }
+    }
+
+    /**
+     * 使用SMOTE增广后训练模型
+     *
+     * 便捷方法：先SMOTE增广，再梯度下降训练。
+     *
+     * @param inputs 原始训练特征
+     * @param labels 原始标签
+     * @param learningRate 学习率
+     * @param epochs 迭代次数
+     * @param smoteK SMOTE近邻数
+     * @param smoteRatio SMOTE过采样比率
+     */
+    public void trainWithSmote(List<FeatureInput> inputs, List<Boolean> labels,
+                               double learningRate, int epochs,
+                               int smoteK, double smoteRatio) {
+        SmoteResult smoteResult = generateSmoteSamples(inputs, labels, smoteK, smoteRatio);
+        train(smoteResult.getAugmentedInputs(), smoteResult.getAugmentedLabels(), learningRate, epochs);
     }
 
     /**
