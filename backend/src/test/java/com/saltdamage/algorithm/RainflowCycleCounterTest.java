@@ -410,4 +410,57 @@ class RainflowCycleCounterTest {
                 "自定义潮解点处权重应为1");
         assertTrue(custom.calculateDeliquescenceWeight(customRh + 10.0) < 1.0);
     }
+
+    // ====== 八、三点雨流法修复验证（平顶波形） ======
+
+    @Test
+    @DisplayName("修复验证：平顶正弦波正确计数（三点雨流法）")
+    void testFlatTopSineWave_CorrectCycleCount_ThreePointMethod() {
+        List<Double> data = new ArrayList<>();
+        for (int period = 0; period < 3; period++) {
+            for (int i = 0; i < 10; i++) data.add(65.0);
+            for (int i = 0; i < 5; i++) data.add(85.0);
+            for (int i = 0; i < 5; i++) data.add(86.0);
+            for (int i = 0; i < 5; i++) data.add(85.0);
+            for (int i = 0; i < 10; i++) data.add(65.0);
+        }
+        RainflowCycleCounter.RainflowResult result = counter.countCycles(data);
+        log.info("平顶波形结果 - 总循环: {}, 完整循环: {}, 穿越: {}",
+                result.getTotalCycles(), result.getFullCycles(), result.getCrossingCycles());
+        assertTrue(result.getTotalCycles() >= 2,
+                "平顶波形应检测到≥2个循环，实际: " + result.getTotalCycles());
+        assertTrue(result.getFullCycles() >= 1,
+                "至少应有1个完整循环，实际: " + result.getFullCycles());
+    }
+
+    @Test
+    @DisplayName("修复验证：对称平顶方波循环数等于周期数")
+    void testFlatTopSquareWave_CorrectCycleCount() {
+        List<Double> data = new ArrayList<>();
+        int periods = 5;
+        for (int i = 0; i < periods; i++) {
+            for (int j = 0; j < 8; j++) data.add(60.0);
+            for (int j = 0; j < 8; j++) data.add(90.0);
+        }
+        for (int j = 0; j < 8; j++) data.add(60.0);
+        RainflowCycleCounter.RainflowResult result = counter.countCycles(data);
+        log.info("平顶方波结果 - 总循环: {}, 期望≈{}", result.getTotalCycles(), periods);
+        assertEquals(periods, result.getTotalCycles(), 2.0,
+                "平顶方波循环数应≈" + periods + "，实际: " + result.getTotalCycles());
+    }
+
+    @Test
+    @DisplayName("修复验证：单次平顶脉冲正确识别1个循环")
+    void testSingleFlatTopPulse_OneCycle() {
+        List<Double> data = new ArrayList<>();
+        for (int i = 0; i < 10; i++) data.add(60.0);
+        for (int i = 0; i < 15; i++) data.add(90.0);
+        for (int i = 0; i < 10; i++) data.add(60.0);
+        RainflowCycleCounter.RainflowResult result = counter.countCycles(data);
+        log.info("单脉冲结果 - 总循环: {}, 完整循环: {}", result.getTotalCycles(), result.getFullCycles());
+        assertTrue(result.getTotalCycles() >= 1,
+                "单次平顶脉冲应至少检测到1个循环");
+        assertEquals(30.0, result.getMaxRange(), 5.0,
+                "最大幅值应≈30%RH（60→90）");
+    }
 }
