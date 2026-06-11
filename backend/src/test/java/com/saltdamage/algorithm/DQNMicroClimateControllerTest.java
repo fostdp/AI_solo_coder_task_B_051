@@ -911,4 +911,109 @@ class DQNMicroClimateControllerTest {
             log.info("模型文件大小: {} bytes", tempFile.length());
         }
     }
-}
+
+    // ============================================================
+    // 十、动作持续性奖励修复验证
+    // ============================================================
+
+    @Nested
+    @DisplayName("十、动作持续性奖励修复验证")
+    class ActionPersistenceTests {
+
+        @Test
+        @DisplayName("26. 修复验证：连续相同动作获得持续性奖励")
+        void testActionPersistence_ContinuousSameActionGetsBonus() throws Exception {
+            setPrivateField(controller, "actionPersistenceBonus", 0.3);
+            setPrivateField(controller, "penaltySwitch", -1.0);
+            controller.resetEnvironment(0.55, 12);
+
+            setPrivateField(controller, "lastAction", 1);
+            setPrivateField(controller, "actionPersistenceCount", 0);
+
+            double rewardSame = invokeCalculateReward(0.55, 1);
+            log.info("连续执行动作1的奖励: {}", rewardSame);
+
+            assertTrue(rewardSame > 0,
+                    "安全区+持续动作应获得正奖励，实际: " + rewardSame);
+        }
+
+        @Test
+        @DisplayName("27. 修复验证：切换动作受到显著惩罚")
+        void testActionSwitching_SignificantPenalty() throws Exception {
+            setPrivateField(controller, "actionPersistenceBonus", 0.3);
+            setPrivateField(controller, "penaltySwitch", -1.0);
+            controller.resetEnvironment(0.55, 12);
+
+            setPrivateField(controller, "lastAction", 0);
+            setPrivateField(controller, "actionPersistenceCount", 5);
+
+            double rewardSwitch = invokeCalculateReward(0.55, 1);
+            log.info("从动作0切换到动作1的奖励: {}", rewardSwitch);
+
+            setPrivateField(controller, "lastAction", 1);
+            setPrivateField(controller, "actionPersistenceCount", 2);
+            double rewardPersist = invokeCalculateReward(0.55, 1);
+            log.info("保持动作1的奖励: {}", rewardPersist);
+
+            assertTrue(rewardPersist > rewardSwitch,
+                    String.format("持续动作奖励(%.2f)应高于切换动作奖励(%.2f)",
+                            rewardPersist, rewardSwitch));
+        }
+
+        @Test
+        @DisplayName("28. 修复验证：待机持续3步以上获得较小持续性奖励")
+        void testIdlePersistence_BonusAfter3Steps() throws Exception {
+            setPrivateField(controller, "actionPersistenceBonus", 0.3);
+            setPrivateField(controller, "penaltySwitch", -1.0);
+            controller.resetEnvironment(0.55, 12);
+
+            setPrivateField(controller, "lastAction", 0);
+            setPrivateField(controller, "actionPersistenceCount", 2);
+            double rewardBelow3 = invokeCalculateReward(0.55, 0);
+
+            setPrivateField(controller, "lastAction", 0);
+            setPrivateField(controller, "actionPersistenceCount", 3);
+            double rewardAt3 = invokeCalculateReward(0.55, 0);
+
+            log.info("待机2步奖励: {}, 待机3步奖励: {}", rewardBelow3, rewardAt3);
+            assertTrue(rewardAt3 > rewardBelow3,
+                    "待机3步以上应获得额外持续性奖励");
+        }
+
+        @Test
+        @DisplayName("29. 修复验证：训练后动作切换率显著降低")
+        void testTrainedPolicy_LowerSwitchRate() throws Exception {
+            setPrivateField(controller, "actionPersistenceBonus", 0.3);
+            setPrivateField(controller, "penaltySwitch", -1.0);
+
+            controller.train(100);
+
+            setPrivateField(controller, "epsilon", 0.05);
+            controller.resetEnvironment(0.55, 12);
+
+            int switches = 0;
+            int lastAct = -1;
+            int testSteps = 50;
+
+            for (int i = 0; i < testSteps; i++) {
+                int act = controller.selectAction(controller.getCurrentState());
+                if (lastAct >= 0 && act != lastAct) switches++;
+                lastAct = act;
+                controller.step(act);
+            }
+
+            double switchRate = (double) switches / (testSteps - 1);
+            log.info("训练后动作切换率: {:.1f}% ({}次切换/{}步)", switchRate * 100, switches, testSteps - 1);
+            assertTrue(switchRate < 0.7,
+                    String.format("训练后切换率应<70%%，实际%.1f%%", switchRate * 100));
+        }
+
+        private double invokeCalculateReward(double rh, int action) throws Exception {
+            Method method = DQNMicroClimateController.class.getDeclaredMethod(
+                    "calculateReward", double.class, int.class, boolean.class, boolean.class);
+            method.setAccessible(true);
+            boolean dehumidifierOn = (action == 1 || action == 3);
+            boolean humidifierOn = (action == 2 || action == 3);
+            return (double) method.invoke(controller, rh, action, dehumidifierOn, humidifierOn);
+        }
+    }
