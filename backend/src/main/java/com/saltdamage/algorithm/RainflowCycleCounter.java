@@ -702,11 +702,6 @@ public class RainflowCycleCounter {
         if (humidityData.isEmpty()) {
             throw new IllegalArgumentException("湿度数据列表为空");
         }
-        if (humidityData.size() < 3) {
-            throw new IllegalArgumentException(
-                    "湿度数据点数量不足，至少需要3个点，当前: " + humidityData.size());
-        }
-
         // 检查数据范围（相对湿度应在0~100%之间）
         for (int i = 0; i < humidityData.size(); i++) {
             Double rh = humidityData.get(i);
