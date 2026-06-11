@@ -11,6 +11,8 @@ import type {
   AlarmStatus,
   AnalysisResult,
   AnalysisRequest,
+  CycleCountData,
+  CycleCountRequest,
   ApiResponse,
   PageResult
 } from '@/types'
@@ -238,5 +240,29 @@ export const tombApi = {
 
   deleteChamber: (chamberId: string): Promise<ApiResponse<void>> => {
     return request.delete<ApiResponse<void>>(`/tomb/chambers/${chamberId}`)
+  }
+}
+
+export const cycleCountApi = {
+  getCycleCountList: (params: CycleCountRequest & { page?: number; pageSize?: number }): Promise<ApiResponse<PageResult<CycleCountData>>> => {
+    return request.get<ApiResponse<PageResult<CycleCountData>>>('/cycle-count', { params })
+  },
+
+  runCycleCount: (params: CycleCountRequest): Promise<ApiResponse<CycleCountData>> => {
+    return request.post<ApiResponse<CycleCountData>>('/cycle-count/run', params)
+  },
+
+  getLatestCycleCount: (tombId?: string, chamberId?: string): Promise<ApiResponse<CycleCountData>> => {
+    return request.get<ApiResponse<CycleCountData>>('/cycle-count/latest', {
+      params: { tombId, chamberId }
+    })
+  },
+
+  getCycleCountDetail: (id: string): Promise<ApiResponse<CycleCountData>> => {
+    return request.get<ApiResponse<CycleCountData>>(`/cycle-count/${id}`)
+  },
+
+  deleteCycleCount: (id: string): Promise<ApiResponse<void>> => {
+    return request.delete<ApiResponse<void>>(`/cycle-count/${id}`)
   }
 }
