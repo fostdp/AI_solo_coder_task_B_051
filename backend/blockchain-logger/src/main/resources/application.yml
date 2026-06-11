@@ -1,0 +1,69 @@
+server:
+  port: 8084
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: blockchain-logger-service
+
+  datasource:
+    mysql:
+      jdbc-url: jdbc:mysql://localhost:3306/salt_damage_biz?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      username: ${DB_MYSQL_USERNAME:root}
+      password: ${DB_MYSQL_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 20
+        minimum-idle: 5
+        connection-timeout: 30000
+    clickhouse:
+      jdbc-url: jdbc:ch://localhost:8123/salt_damage?connect_timeout=30000&socket_timeout=300000
+      username: ${DB_CLICKHOUSE_USERNAME:default}
+      password: ${DB_CLICKHOUSE_PASSWORD:}
+      driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+      hikari:
+        maximum-pool-size: 30
+        minimum-idle: 10
+        connection-timeout: 30000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 10
+          min-idle: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+blockchain:
+  difficulty: 3
+  max-block-size: 100
+  genesis-message: Genesis Block - Salt Damage Monitor System
+
+logging:
+  level:
+    root: INFO
+    com.saltdamage: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
