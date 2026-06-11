@@ -283,6 +283,182 @@ services:
       timeout: 10s
       retries: 3
 
+  rainflow-cycle:
+    build:
+      context: ./backend
+      dockerfile: rainflow-cycle/Dockerfile
+    container_name: salt-damage-rainflow-cycle
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8085
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RAINFLOW_THREAD_POOL_CORE_SIZE=4
+      - RAINFLOW_THREAD_POOL_MAX_SIZE=8
+      - RAINFLOW_THREAD_POOL_QUEUE_CAPACITY=100
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8085:8085"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8085/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dqn-controller:
+    build:
+      context: ./backend
+      dockerfile: dqn-controller/Dockerfile
+    container_name: salt-damage-dqn-controller
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8086
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DQN_ONNX_MODEL_PATH=/app/models/dqn_microclimate.onnx
+      - DQN_INPUT_DIM=5
+      - DQN_OUTPUT_DIM=4
+      - DQN_HIDDEN1=32
+      - DQN_HIDDEN2=16
+      - ALGORITHM_DQN_ACTION_PERSISTENCE_BONUS=0.3
+      - ALGORITHM_DQN_PENALTY_SWITCH=-1.0
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./backend/dqn-controller/models:/app/models:ro
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  flaking-rf:
+    build:
+      context: ./backend
+      dockerfile: flaking-rf/Dockerfile
+    container_name: salt-damage-flaking-rf
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8087
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ALGORITHM_DELAMINATION_SMOTE_K=5
+      - ALGORITHM_DELAMINATION_SMOTE_RATIO=1.0
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8087:8087"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8087/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  blockchain-logger:
+    build:
+      context: ./backend
+      dockerfile: blockchain-logger/Dockerfile
+    container_name: salt-damage-blockchain-logger
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8088
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BLOCKCHAIN_DIFFICULTY=3
+      - BLOCKCHAIN_MAX_BLOCK_SIZE=100
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8088:8088"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8088/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ============================================================================
   # 前端
   # ============================================================================
