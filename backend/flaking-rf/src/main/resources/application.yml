@@ -1,0 +1,70 @@
+server:
+  port: 8083
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: flaking-rf-service
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: flaking-rf-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.saltdamage.*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+
+  datasource:
+    clickhouse:
+      url: jdbc:clickhouse://localhost:8123/salt_damage
+      username: default
+      password:
+      driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+
+    mysql:
+      url: jdbc:mysql://localhost:3306/salt_damage?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      username: root
+      password: root
+      driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+algorithm:
+  delamination:
+    weights:
+      w0: -3.0
+      w1: 1.5
+      w2: -2.0
+      w3: 2.5
+      w4: 0.8
+      w5: 0.5
+      w6: 0.3
+    risk-levels:
+      low: 0.1
+      medium: 0.3
+      high: 0.6
+    smote:
+      k: 5
+      ratio: 1.0
+
+logging:
+  level:
+    com.saltdamage: DEBUG
