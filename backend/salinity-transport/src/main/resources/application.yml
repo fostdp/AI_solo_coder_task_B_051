@@ -1,0 +1,67 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: salinity-transport
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: salinity-transport-group
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.saltdamage.common.message"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+
+  datasource:
+    clickhouse:
+      url: jdbc:clickhouse://localhost:8123/salt_damage
+      username: default
+      password:
+    mysql:
+      url: jdbc:mysql://localhost:3306/salt_damage?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+      username: root
+      password: root
+      driver-class-name: com.mysql.cj.jdbc.Driver
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms
+
+algorithm:
+  salt-migration:
+    porosity: 0.35
+    permeability: 1.0e-12
+    viscosity: 0.001002
+    diffusion-coeff: 1.33e-9
+    grid-rows: 10
+    grid-cols: 10
+    grid-delta-x: 0.01
+    grid-delta-y: 0.01
+    bottom-porosity: 0.40
+    top-porosity: 0.15
+  fem:
+    max-iterations: 100
+    time-step: 1.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.saltdamage.transport: INFO
+    com.saltdamage.transport.algorithm: DEBUG

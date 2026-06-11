@@ -1,148 +1,16 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>水利工程安全监测平台</title>
-    <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-    <div id="app">
-        <header class="top-bar">
-            <div class="logo">
-                <span class="logo-icon">💧</span>
-                <h1>水利工程安全监测平台</h1>
-            </div>
-            <div class="status-bar">
-                <span class="status-item" id="ws-status">
-                    <span class="status-dot disconnected"></span>
-                    <span>连接断开</span>
-                </span>
-                <span class="status-item" id="sensor-count">传感器: 0</span>
-                <span class="status-item" id="active-alerts">活跃告警: 0</span>
-                <span class="status-item" id="predictions-count">预测预警: 0</span>
-                <span class="status-item" id="zone-risks-count">区域风险: 0</span>
-                <span class="status-item" id="server-time"></span>
-                <button id="btn-export-report" class="btn-export" title="导出报告">📊 导出报告</button>
-            </div>
-        </header>
-
-        <main class="main-content">
-            <aside class="left-panel">
-                <div class="panel-section">
-                    <h3>监测区域</h3>
-                    <div id="zone-list" class="zone-list"></div>
-                </div>
-                <div class="panel-section">
-                    <h3>传感器筛选</h3>
-                    <div class="filter-group">
-                        <label>类型:</label>
-                        <select id="sensor-type-filter">
-                            <option value="">全部</option>
-                            <option value="seepage">渗流</option>
-                            <option value="displacement">位移</option>
-                            <option value="stress">应力</option>
-                            <option value="crack">裂缝</option>
-                            <option value="water_level">水位</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>状态:</label>
-                        <select id="sensor-status-filter">
-                            <option value="">全部</option>
-                            <option value="normal">正常</option>
-                            <option value="warning">告警</option>
-                            <option value="critical">严重</option>
-                        </select>
-                    </div>
-                </div>
-            </aside>
-
-            <section class="canvas-container" id="canvas-container">
-                <canvas id="monitor-canvas"></canvas>
-                <div class="canvas-controls">
-                    <button id="btn-zoom-in" title="放大">+</button>
-                    <button id="btn-zoom-out" title="缩小">−</button>
-                    <button id="btn-reset-view" title="重置视图">⟲</button>
-                </div>
-                <div class="canvas-legend">
-                    <div class="legend-item"><span class="legend-dot normal"></span>正常</div>
-                    <div class="legend-item"><span class="legend-dot warning"></span>警告</div>
-                    <div class="legend-item"><span class="legend-dot critical"></span>严重</div>
-                    <div class="legend-item"><span class="legend-dot emergency"></span>紧急</div>
-                </div>
-            </section>
-
-            <aside class="right-panel">
-                <div class="panel-section">
-                    <h3>告警列表</h3>
-                    <div id="alert-list" class="alert-list"></div>
-                </div>
-                <div class="panel-section">
-                    <h3>传感器详情</h3>
-                    <div id="sensor-detail" class="sensor-detail">
-                        <p class="placeholder">点击传感器查看详情</p>
-                    </div>
-                </div>
-                <div class="panel-section">
-                    <h3>趋势图</h3>
-                    <canvas id="trend-canvas" width="280" height="160"></canvas>
-                </div>
-            </aside>
-        </main>
-
-        <div id="toast-container" class="toast-container"></div>
-
-        <div id="emergency-guide-modal" class="modal-overlay hidden">
-            <div class="modal-content modal-large">
-                <div class="modal-header">
-                    <h2 id="emergency-guide-title">应急响应指引</h2>
-                    <button class="modal-close" id="close-emergency-guide">&times;</button>
-                </div>
-                <div class="modal-body" id="emergency-guide-content">
-                </div>
-            </div>
-        </div>
-
-        <div id="export-modal" class="modal-overlay hidden">
-            <div class="modal-content modal-small">
-                <div class="modal-header">
-                    <h2>导出监测报告</h2>
-                    <button class="modal-close" id="close-export-modal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>选择区域:</label>
-                        <select id="export-zone">
-                            <option value="">全部区域</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>时间范围:</label>
-                        <div class="date-range">
-                            <input type="datetime-local" id="export-from">
-                            <span>至</span>
-                            <input type="datetime-local" id="export-to">
-                        </div>
-                    </div>
-                    <div class="form-group checkbox-group">
-                        <label><input type="checkbox" id="export-include-data" checked> 包含传感器数据</label>
-                        <label><input type="checkbox" id="export-include-alerts" checked> 包含告警记录</label>
-                    </div>
-                    <div class="form-actions">
-                        <button id="btn-do-export" class="btn-primary">导出报告</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="js/utils/transform.js"></script>
-    <script src="js/ws/client.js"></script>
-    <script src="js/canvas/sensorMarker.js"></script>
-    <script src="js/canvas/crossSection.js"></script>
-    <script src="js/canvas/monitor.js"></script>
-    <script src="js/alert/panel.js"></script>
-    <script src="js/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>古墓葬盐害监测系统</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body class="dark">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

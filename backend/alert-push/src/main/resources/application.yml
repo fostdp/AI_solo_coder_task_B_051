@@ -1,0 +1,75 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: alert-push
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: alert-push-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.saltdamage.common.message"
+
+  datasource:
+    mysql:
+      url: jdbc:mysql://localhost:3306/salt_damage_monitor?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      username: root
+      password: root
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 10
+        minimum-idle: 5
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      timeout: 5000
+
+alarm:
+  salt-threshold: 5
+  humidity-threshold: 75
+  humidity-duration: 48
+
+dingtalk:
+  webhook: ""
+  secret: ""
+
+websocket:
+  path: /ws/monitor
+  allowed-origins: "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.saltdamage: DEBUG
+    org.springframework.kafka: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"

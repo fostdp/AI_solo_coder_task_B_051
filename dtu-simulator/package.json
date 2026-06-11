@@ -1,0 +1,26 @@
+{
+  "name": "dtu-simulator",
+  "version": "1.0.0",
+  "description": "4G DTU模拟器 - 模拟文物墓葬盐离子和微环境传感器数据上报",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "simulate": "node src/index.js --mode realtime",
+    "simulate:fast": "node src/index.js --mode fast --speed 24"
+  },
+  "keywords": [
+    "dtu",
+    "simulator",
+    "sensor",
+    "iot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "commander": "^11.1.0",
+    "cron": "^3.1.6",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0"
+  }
+}

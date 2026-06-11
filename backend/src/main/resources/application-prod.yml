@@ -1,0 +1,140 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: ${SPRING_APP_NAME:salt-damage-monitor}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      buffer-memory: 33554432
+      linger-ms: 5
+      enable-idempotence: true
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:salt-damage-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.saltdamage.common.message"
+      enable-auto-commit: false
+    listener:
+      ack-mode: manual_immediate
+      concurrency: 3
+
+  datasource:
+    mysql:
+      jdbc-url: ${DB_MYSQL_JDBC_URL:jdbc:mysql://localhost:3306/salt_damage_biz?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+      username: ${DB_MYSQL_USERNAME:root}
+      password: ${DB_MYSQL_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: ${DB_MYSQL_POOL_SIZE:25}
+        minimum-idle: ${DB_MYSQL_POOL_MIN:5}
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        leak-detection-threshold: 60000
+    clickhouse:
+      jdbc-url: ${DB_CLICKHOUSE_JDBC_URL:jdbc:ch://localhost:8123/salt_damage?connect_timeout=30000&socket_timeout=300000}
+      username: ${DB_CLICKHOUSE_USERNAME:default}
+      password: ${DB_CLICKHOUSE_PASSWORD:}
+      driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+      hikari:
+        maximum-pool-size: ${DB_CLICKHOUSE_POOL_SIZE:40}
+        minimum-idle: ${DB_CLICKHOUSE_POOL_MIN:10}
+        connection-timeout: 30000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:50}
+          max-idle: ${REDIS_POOL_MAX_IDLE:10}
+          min-idle: ${REDIS_POOL_MIN_IDLE:5}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+disruptor:
+  ring-buffer-size: ${DISRUPTOR_RING_BUFFER_SIZE:2048}
+  max-retries: ${DISRUPTOR_MAX_RETRIES:3}
+  retry-delay-ms: ${DISRUPTOR_RETRY_DELAY_MS:1000}
+  max-event-age-ms: ${DISRUPTOR_MAX_EVENT_AGE_MS:300000}
+  dead-letter-capacity: ${DISRUPTOR_DEAD_LETTER_CAPACITY:10000}
+
+alarm:
+  salt-threshold: ${ALARM_SALT_THRESHOLD:5.0}
+  humidity-threshold: ${ALARM_HUMIDITY_THRESHOLD:75.0}
+  humidity-duration: ${ALARM_HUMIDITY_DURATION:48}
+  offline-duration: ${ALARM_OFFLINE_DURATION:4}
+
+dingtalk:
+  enabled: ${DINGTALK_ENABLED:false}
+  app-key: ${DINGTALK_APP_KEY:}
+  app-secret: ${DINGTALK_APP_SECRET:}
+  webhook-url: ${DINGTALK_WEBHOOK_URL:}
+  secret: ${DINGTALK_SIGN_SECRET:}
+
+websocket:
+  endpoint: ${WS_ENDPOINT:/ws}
+  allowed-origins: ${WS_ALLOWED_ORIGINS:*}
+  heartbeat-interval: ${WS_HEARTBEAT_INTERVAL:30000}
+
+algorithm:
+  salt-migration:
+    porosity: ${ALG_POROSITY:0.35}
+    permeability: ${ALG_PERMEABILITY:1.0e-12}
+    viscosity: ${ALG_VISCOSITY:0.001002}
+    diffusion-coeff: ${ALG_DIFFUSION_COEFF:1.33e-9}
+    kozeny-constant: ${ALG_KOZENY_CONSTANT:5.0}
+    particle-diameter: ${ALG_PARTICLE_DIAMETER:1.0e-4}
+  crystallization:
+    prediction-hours: ${ALG_PREDICTION_HOURS:72}
+    risk-levels:
+      low: ${ALG_RISK_LOW:0.5}
+      medium: ${ALG_RISK_MEDIUM:1.0}
+      high: ${ALG_RISK_HIGH:2.0}
+      critical: ${ALG_RISK_CRITICAL:5.0}
+  fem:
+    max-iterations: ${ALG_FEM_MAX_ITERATIONS:100}
+    time-step: ${ALG_FEM_TIME_STEP:1.0}
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.saltdamage: ${LOG_LEVEL_APP:INFO}
+  file:
+    name: ${LOG_FILE_PATH:logs/salt-damage-monitor.log}
+    max-size: ${LOG_FILE_MAX_SIZE:50MB}
+    max-history: ${LOG_FILE_MAX_HISTORY:30}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: ${METRICS_PROMETHEUS_ENABLED:true}

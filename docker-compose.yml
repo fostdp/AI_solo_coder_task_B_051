@@ -1,0 +1,389 @@
+version: '3.9'
+
+services:
+  # ============================================================================
+  # 基础设施
+  # ============================================================================
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: salt-damage-zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_PORT_NUMBER=2181
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: salt-damage-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=6
+      - KAFKA_CFG_DEFAULT_REPLICATION_FACTOR=1
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/bitnami/kafka
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    container_name: salt-damage-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:root123}
+      - MYSQL_DATABASE=salt_damage_biz
+      - MYSQL_USER=${MYSQL_USER:salt}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=500
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: salt-damage-redis
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: salt-damage-clickhouse
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - CLICKHOUSE_DB=salt_damage
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Java 微服务
+  # ============================================================================
+
+  data-ingest:
+    build:
+      context: ./backend
+      dockerfile: data-ingest/Dockerfile
+    container_name: salt-damage-data-ingest
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8081
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:}
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=when-authorized
+    ports:
+      - "8081:8081"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  salinity-transport:
+    build:
+      context: ./backend
+      dockerfile: salinity-transport/Dockerfile
+    container_name: salt-damage-salinity-transport
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8082
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8082:8082"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  crystal-pressure:
+    build:
+      context: ./backend
+      dockerfile: crystal-pressure/Dockerfile
+    container_name: salt-damage-crystal-pressure
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8083
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - DB_CLICKHOUSE_HOST=clickhouse
+      - DB_CLICKHOUSE_PORT=8123
+      - DB_CLICKHOUSE_DATABASE=salt_damage
+      - DB_CLICKHOUSE_USERNAME=${CLICKHOUSE_USER:default}
+      - DB_CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8083:8083"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  alert-push:
+    build:
+      context: ./backend
+      dockerfile: alert-push/Dockerfile
+    container_name: salt-damage-alert-push
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8084
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DB_MYSQL_HOST=mysql
+      - DB_MYSQL_PORT=3306
+      - DB_MYSQL_DATABASE=salt_damage_biz
+      - DB_MYSQL_USERNAME=${MYSQL_USER:salt}
+      - DB_MYSQL_PASSWORD=${MYSQL_PASSWORD:salt123}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DINGTALK_ENABLED=${DINGTALK_ENABLED:false}
+      - DINGTALK_APP_KEY=${DINGTALK_APP_KEY:}
+      - DINGTALK_APP_SECRET=${DINGTALK_APP_SECRET:}
+      - DINGTALK_WEBHOOK_URL=${DINGTALK_WEBHOOK_URL:}
+      - DINGTALK_SIGN_SECRET=${DINGTALK_SIGN_SECRET:}
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,metrics,prometheus
+    ports:
+      - "8084:8084"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # 前端
+  # ============================================================================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: salt-damage-frontend
+    depends_on:
+      - data-ingest
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8081
+    ports:
+      - "80:80"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================================
+  # 4G DTU 模拟器
+  # ============================================================================
+
+  dtu-simulator:
+    build:
+      context: ./dtu-simulator
+      dockerfile: Dockerfile
+    container_name: salt-damage-dtu-simulator
+    depends_on:
+      - data-ingest
+    environment:
+      - NODE_ENV=production
+      - API_BASE_URL=http://data-ingest:8081
+      - REPORT_INTERVAL_MINUTES=${DTU_REPORT_INTERVAL:120}
+      - DEVICE_COUNT=${DTU_DEVICE_COUNT:70}
+      - PACKET_LOSS_RATE=${DTU_PACKET_LOSS_RATE:0.02}
+      - HIGH_SALT_EVENT_ENABLED=${DTU_HIGH_SALT_EVENT:false}
+      - HIGH_SALT_MULTIPLIER=${DTU_HIGH_SALT_MULTIPLIER:5}
+      - HIGH_SALT_EVENT_HOURS=${DTU_HIGH_SALT_HOURS:4}
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+
+  # ============================================================================
+  # 监控
+  # ============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: salt-damage-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.path=/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: salt-damage-grafana
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - salt-damage-net
+    restart: unless-stopped
+
+volumes:
+  zookeeper_data:
+  kafka_data:
+  mysql_data:
+  redis_data:
+  clickhouse_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  salt-damage-net:
+    driver: bridge

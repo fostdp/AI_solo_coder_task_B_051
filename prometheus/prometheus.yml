@@ -1,0 +1,44 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'salt-damage-monitor'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'data-ingest'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['data-ingest:8081']
+    scrape_interval: 10s
+
+  - job_name: 'salinity-transport'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['salinity-transport:8082']
+    scrape_interval: 10s
+
+  - job_name: 'crystal-pressure'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['crystal-pressure:8083']
+    scrape_interval: 10s
+
+  - job_name: 'alert-push'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['alert-push:8084']
+    scrape_interval: 10s
+
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+    scrape_interval: 30s
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9090']
+    scrape_interval: 30s

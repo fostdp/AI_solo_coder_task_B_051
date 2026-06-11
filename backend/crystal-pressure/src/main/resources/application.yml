@@ -1,0 +1,74 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: crystal-pressure
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: crystal-pressure-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.saltdamage.*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+
+  datasource:
+    clickhouse:
+      url: jdbc:clickhouse://localhost:8123/salt_damage
+      username: default
+      password:
+      driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+
+    mysql:
+      url: jdbc:mysql://localhost:3306/salt_damage?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      username: root
+      password: root
+      driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+algorithm:
+  crystallization:
+    prediction-hours: 72
+    default-temperature: 25.0
+    default-humidity: 0.6
+    default-concentration: 1.0
+    risk-levels:
+      low: 0.5
+      medium: 1.0
+      high: 2.0
+      critical: 5.0
+    pitzer:
+      A-phi: 0.3915
+      beta0: 0.0496
+      beta1: 0.4815
+      C-phi: 0.00447
+      alpha: 2.0
+      b: 1.2
