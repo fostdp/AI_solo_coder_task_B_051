@@ -1,7 +1,8 @@
 import { Suspense, useState, useMemo } from 'react'
-import { AlertTriangle, Beaker, Thermometer, Shield, ArrowRight } from 'lucide-react'
+import { AlertTriangle, Beaker, Thermometer, Shield, ArrowRight, RefreshCw, Activity } from 'lucide-react'
 import { useMockData } from '@/hooks/useMockData'
 import AnalysisChart from '@/components/AnalysisChart'
+import CycleCountChart from '@/components/CycleCountChart'
 import TombScene3D from '@/components/TombScene3D'
 import Loading from '@/components/Loading'
 import { RiskLevel } from '@/types'
@@ -23,8 +24,9 @@ const riskLevelLabels: Record<RiskLevel, string> = {
 }
 
 function Analysis(): JSX.Element {
-  const { chambers, devices, saltData, envData, analysisResults, loading } = useMockData()
+  const { chambers, devices, saltData, envData, analysisResults, cycleCountDataList, loading } = useMockData()
   const [selectedChamberId, setSelectedChamberId] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<'analysis' | 'cycle-count'>('analysis')
 
   const filteredAnalysis = useMemo(() => {
     if (!selectedChamberId) return analysisResults
@@ -123,6 +125,16 @@ function Analysis(): JSX.Element {
     })
   }, [filteredSaltData])
 
+  const filteredCycleCount = useMemo(() => {
+    if (!selectedChamberId) return cycleCountDataList
+    return cycleCountDataList.filter((c) => c.chamberId === selectedChamberId)
+  }, [cycleCountDataList, selectedChamberId])
+
+  const selectedCycleCount = useMemo(() => {
+    if (filteredCycleCount.length === 0) return null
+    return filteredCycleCount[0]
+  }, [filteredCycleCount])
+
   if (loading) {
     return <Loading centered text="加载分析数据..." />
   }
@@ -151,9 +163,40 @@ function Analysis(): JSX.Element {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {riskCards.map((card) => (
-          <div key={card.title} className="glass-card p-5">
+      <div className="flex items-center gap-2 border-b border-gray-700/50 pb-2">
+        <button
+          onClick={() => setActiveTab('analysis')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'analysis'
+              ? 'bg-bronze-green/20 text-bronze-green border border-bronze-green/30'
+              : 'text-gray-400 hover:text-white hover:bg-dark-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Beaker size={16} />
+            <span>盐害分析</span>
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('cycle-count')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'cycle-count'
+              ? 'bg-bronze-green/20 text-bronze-green border border-bronze-green/30'
+              : 'text-gray-400 hover:text-white hover:bg-dark-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Activity size={16} />
+            <span>循环计数统计</span>
+          </div>
+        </button>
+      </div>
+
+      {activeTab === 'analysis' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {riskCards.map((card) => (
+              <div key={card.title} className="glass-card p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <card.icon size={18} className="text-gray-400" />
@@ -400,6 +443,77 @@ function Analysis(): JSX.Element {
           </div>
         </div>
       </div>
+        </>
+      )}
+
+      {activeTab === 'cycle-count' && (
+        <div className="space-y-6">
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity size={20} className="text-bronze-green" />
+                <h3 className="text-lg font-bold text-white font-serif-sc">盐结晶潮解循环统计</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="btn-secondary flex items-center gap-2">
+                  <RefreshCw size={16} />
+                  <span>重新统计</span>
+                </button>
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm mb-4">
+              采用雨流计数法对相对湿度时序数据进行循环统计，分析盐结晶潮解循环次数及疲劳损伤评估
+            </p>
+          </div>
+
+          {selectedCycleCount ? (
+            <CycleCountChart data={selectedCycleCount} height={300} />
+          ) : (
+            <div className="glass-card p-6">
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                暂无循环统计数据，请选择墓室
+              </div>
+            </div>
+          )}
+
+          <div className="glass-card p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Beaker size={18} className="text-bronze-green" />
+              <h3 className="text-base font-bold text-white font-serif-sc">雨流计数法说明</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <span className="text-bronze-green font-mono shrink-0">原理</span>
+                  <span className="text-gray-300 text-sm">
+                    雨流计数法是一种常用的循环计数方法，通过模拟雨水从屋顶流下的过程，对载荷时间历程进行循环计数。
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-bronze-green font-mono shrink-0">应用</span>
+                  <span className="text-gray-300 text-sm">
+                    用于统计盐结晶/潮解循环次数，评估循环载荷对文物建筑材料的疲劳损伤。
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <span className="text-bronze-green font-mono shrink-0">潮解点</span>
+                  <span className="text-gray-300 text-sm">
+                    75%RH 为 Na₂SO₄ 的临界潮解湿度，超过此湿度盐分会发生潮解。
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-bronze-green font-mono shrink-0">损伤评估</span>
+                  <span className="text-gray-300 text-sm">
+                    基于Miner线性累积损伤理论，计算循环幅度越大，对材料的损伤越严重。
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
