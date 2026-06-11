@@ -186,7 +186,25 @@ public class DQNMicroClimateController {
      * 频繁切换惩罚
      */
     @Value("${algorithm.dqn.penalty-switch:-0.2}")
-    private double penaltySwitch = -0.2;
+    private double penaltySwitch;
+
+    /**
+     * 动作持续性奖励（鼓励保持同一动作）
+     * 修复缺陷：原奖励函数频繁切换惩罚(-0.2)过小，无法有效抑制频繁启停
+     * 根因：仅有一个微弱的penaltySwitch=-0.2，而无对持续性的正向激励，
+     *       DQN学到"快速切换动作以微调RH"的策略，导致除湿机/加湿器频繁启停，
+     *       实际设备中这不仅浪费能源，还会缩短设备寿命。
+     * 修复：新增 actionPersistenceBonus=0.3，当连续执行同一动作时给予正向奖励，
+     *       同时将切换惩罚提升到 penaltySwitch=-1.0，使切换成本显著高于持续性收益。
+     *       这迫使DQN学到"选择一个动作后持续执行"的策略。
+     */
+    @Value("${algorithm.dqn.action-persistence-bonus:0.3}")
+    private double actionPersistenceBonus;
+
+    /**
+     * 连续执行同一动作的步数
+     */
+    private int actionPersistenceCount;
 
     /**
      * 连续安全目标奖励
@@ -298,6 +316,7 @@ public class DQNMicroClimateController {
 
         this.currentTime = initialHour;
         this.lastAction = 0;
+        this.actionPersistenceCount = 0;
         this.consecutiveSafeHours = 0;
         this.rhHistory = new ArrayList<>();
         this.rhHistory.add(initialRh);
@@ -584,7 +603,6 @@ public class DQNMicroClimateController {
     private double calculateReward(double rh, int action, boolean dehumidifierOn, boolean humidifierOn) {
         double reward = 0.0;
 
-        // 基础奖励（基于RH区间）
         if (rh < 0.4 || rh > 0.9) {
             reward += penaltyExtreme;
         } else if (rh >= 0.65 && rh <= 0.80) {
@@ -593,7 +611,6 @@ public class DQNMicroClimateController {
             reward += rewardSafe;
         }
 
-        // 能耗惩罚
         if (dehumidifierOn && humidifierOn) {
             reward += penaltyBoth;
         } else if (dehumidifierOn) {
@@ -602,9 +619,16 @@ public class DQNMicroClimateController {
             reward += penaltyHumidifier;
         }
 
-        // 频繁切换惩罚
         if (action != lastAction) {
             reward += penaltySwitch;
+            actionPersistenceCount = 0;
+        } else {
+            actionPersistenceCount++;
+            if (actionPersistenceCount >= 1 && action != 0) {
+                reward += actionPersistenceBonus;
+            } else if (actionPersistenceCount >= 3 && action == 0) {
+                reward += actionPersistenceBonus * 0.5;
+            }
         }
 
         return reward;
