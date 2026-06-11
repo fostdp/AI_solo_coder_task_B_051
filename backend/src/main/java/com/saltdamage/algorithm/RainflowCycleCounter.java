@@ -17,7 +17,7 @@ import java.util.List;
  *
  * 核心算法：
  * 1. 提取峰值谷值（极值点），去除无效的小波动
- * 2. 采用ASTM标准雨流算法（四峰谷法）进行循环计数
+ * 2. 采用ASTM E1049-85标准三点雨流法进行循环计数（修复：原四峰谷法对平顶波形误计）
  * 3. 基于Miner线性累积损伤准则评估疲劳损伤
  * 4. 考虑潮解点附近的损伤权重（高斯权重函数）
  *
@@ -343,18 +343,16 @@ public class RainflowCycleCounter {
     // ==================== 雨流计数核心算法 ====================
 
     /**
-     * 基于极值点序列执行雨流计数（ASTM标准四峰谷法）
+     * 基于极值点序列执行雨流计数（三点雨流法）
      *
-     * 雨流计数法原理：
-     * 想象雨水从"屋顶"（极值点构成的折线）流下，记录每滴雨水的流动路径。
-     * 当雨水满足以下条件之一时，形成一个完整循环：
-     * 1. 雨水从某点流下，与对面的"屋檐"相遇
-     * 2. 雨水的路径长度超过一定阈值
-     *
-     * 本实现采用经典的"四峰谷法"算法：
-     * - 依次考虑连续四个极值点X1, X2, X3, X4
-     * - 如果|X3-X4| ≥ |X1-X2|且|X2-X3| ≤ |X1-X2|，则X2-X3构成一个完整循环
-     * - 移除X2和X3，继续检查
+     * 修复缺陷：原四峰谷法对平顶波形误计循环
+     * 根因：四峰谷法需要4个连续极值点X1,X2,X3,X4，判断|X3-X4|>=|X1-X2|且|X2-X3|<=|X1-X2|
+     *       对于平顶波形（连续等值或近似等值段），极值提取后产生连续同向极值点，
+     *       导致四峰谷条件永远无法满足，遗漏循环或误计循环幅度。
+     * 修复：改用ASTM E1049-85标准三点雨流法，只需3个连续极值点即可识别循环：
+     *       对连续三个极值点S1,S2,S3，若|S2-S3|<=|S1-S2|，则S1-S2构成一个完整循环
+     *       移除S1和S2，回退检查；否则前进一步。
+     *       三点法对平顶段更鲁棒，因为平顶段合并后不会影响相邻循环的识别。
      *
      * @param extrema 极值点序列（交替峰谷）
      * @return 检测到的循环列表
@@ -366,34 +364,26 @@ public class RainflowCycleCounter {
             return cycles;
         }
 
-        // 复制极值点用于操作
         List<Double> points = new ArrayList<>(extrema);
 
         int i = 0;
-        while (i <= points.size() - 4) {
-            double x1 = points.get(i);
-            double x2 = points.get(i + 1);
-            double x3 = points.get(i + 2);
-            double x4 = points.get(i + 3);
+        while (i <= points.size() - 3) {
+            double s1 = points.get(i);
+            double s2 = points.get(i + 1);
+            double s3 = points.get(i + 2);
 
-            double range12 = Math.abs(x2 - x1);
-            double range23 = Math.abs(x3 - x2);
-            double range34 = Math.abs(x4 - x3);
+            double range12 = Math.abs(s2 - s1);
+            double range23 = Math.abs(s3 - s2);
 
-            // 雨流法判断条件
-            if (range34 >= range12 && range23 <= range12) {
-                // X2-X3构成一个完整循环
-                double cycleRange = range23;
-                double cycleMean = (x2 + x3) / 2.0;
-                boolean isFullCycle = true;
+            if (range23 <= range12 && range12 >= extremaThreshold) {
+                double cycleRange = range12;
+                double cycleMean = (s1 + s2) / 2.0;
 
-                cycles.add(new Cycle(cycleRange, cycleMean, isFullCycle, i + 1, i + 2));
+                cycles.add(new Cycle(cycleRange, cycleMean, true, i, i + 1));
 
-                // 移除X2和X3
-                points.remove(i + 2);
                 points.remove(i + 1);
+                points.remove(i);
 
-                // 回退检查
                 if (i > 0) {
                     i--;
                 }
@@ -402,7 +392,6 @@ public class RainflowCycleCounter {
             }
         }
 
-        // 处理剩余的点（形成部分循环/残留循环）
         for (int j = 0; j < points.size() - 1; j++) {
             double range = Math.abs(points.get(j + 1) - points.get(j));
             if (range >= extremaThreshold) {
@@ -411,7 +400,6 @@ public class RainflowCycleCounter {
             }
         }
 
-        // 按幅值排序（从大到小）
         cycles.sort((a, b) -> Double.compare(b.range, a.range));
 
         return cycles;
